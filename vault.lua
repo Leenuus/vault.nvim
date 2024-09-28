@@ -78,6 +78,7 @@ local jlist = {}
 local buf = api.nvim_buf_get_lines(0, startline - 1, stopline, false)
 log.debug(buf)
 local newbuf = copybuf(buf)
+local hpositions = {}
 -- NOTE: label non-first matches
 for i = 2, #positions do
 	local lb = safe_labels[i - 1]
@@ -87,27 +88,39 @@ for i = 2, #positions do
 		break
 	end
 	local pos = positions[i]
+	local hpos = {}
 	jlist[lb] = pos
 
-	-- TODO: draw labels near positions, 2 char after
+	-- NOTE: draw labels near positions, 2 char after
 	local lnum = pos[1]
+	table.insert(hpos, lnum)
 	local col = pos[2] -- NOTE: one-based
 	local cline = newbuf[lnum]
 	cline = vim.split(cline, "")
 	log.debug(vim.inspect(cline))
 	if cline[col + 2] then
 		cline[col + 2] = lb
+		table.insert(hpos, col + 2)
 	else
 		table.insert(cline, lb)
+		table.insert(hpos, #cline)
 	end
 	cline = fn.join(cline, "")
-	newbuf[lnum] = cline
+	newbuf[lnum] = cline -- NOTE: build marked buf
+	table.insert(hpositions, hpos) -- NOTE: build highlight pos
 end
 
--- NOTE: set lines
+-- NOTE: set lines and force redraw
 api.nvim_buf_set_lines(0, startline - 1, stopline, false, newbuf)
 
--- TODO: optional: highlight and label non-first matches
+-- NOTE: highlight and label non-first matches
+vim.cmd("highlight VaultNvim ctermbg=red guibg=red")
+log.debug(hpositions)
+local hid = fn.matchaddpos("VaultNvim", hpositions)
+
+vim.cmd("redraw")
+
+-- TODO: optional: shade other contents
 
 -- NOTE: read user input, move cursor to matching label
 local lch = readchar()
@@ -117,4 +130,7 @@ if jlist[lch] then
 end
 
 -- NOTE: restore line
--- api.nvim_buf_set_lines(0, startline - 1, stopline, false, buf)
+api.nvim_buf_set_lines(0, startline - 1, stopline, false, buf)
+
+-- NOTE: remove highlight
+fn.matchdelete(hid)
