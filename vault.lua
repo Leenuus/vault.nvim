@@ -2,6 +2,32 @@ local fn = vim.fn
 local api = vim.api
 local log = require("plenary").log
 
+-- TODO: handle readonly buffer
+
+local function restore_opts(opts)
+	opts = opts
+		or {
+			scrolloff = 0,
+			modified = false,
+			modifiable = true,
+			readonly = false,
+			spell = false,
+			virtualedit = "",
+		}
+	local o_opts = {
+		scrolloff = vim.o["scrolloff"],
+		modified = vim.o["modified"],
+		modifiable = vim.o["modifiable"],
+		readonly = vim.o["readonly"],
+		spell = vim.o["spell"],
+		virtualedit = vim.o["virtualedit"],
+	}
+	for k, v in pairs(opts) do
+		vim.opt_local[k] = v
+	end
+	return o_opts
+end
+
 local function readchar()
 	local ch = fn.getchar()
 	ch = fn.nr2char(ch)
@@ -55,6 +81,8 @@ end
 if #positions == 0 then
 	return
 end
+
+local old_opts = restore_opts()
 
 log.debug(vim.inspect(positions))
 
@@ -134,3 +162,6 @@ api.nvim_buf_set_lines(0, startline - 1, stopline, false, buf)
 
 -- NOTE: remove highlight
 fn.matchdelete(hid)
+
+-- NOTE: restore opts
+restore_opts(old_opts)
