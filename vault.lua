@@ -1,43 +1,120 @@
 local fn = vim.fn
+local api = vim.api
+local log = require("plenary").log
 
-local ch = fn.getchar()
-ch = fn.nr2char(ch)
-print(vim.inspect(ch))
+local function readchar()
+	local ch = fn.getchar()
+	ch = fn.nr2char(ch)
+	return ch
+end
 
--- local pos = fn.searchpos(ch)
--- if pos[1] == 0 and pos[2] == 0 then
--- 	print("good")
--- end
+local function setpos(position)
+	local lnum = position[1]
+	local col = position[2]
+	fn.setcursorcharpos(lnum, col)
+end
+
+local function copybuf(buf)
+	local new = {}
+	for i = 1, #buf do
+		new[i] = buf[i]
+	end
+	return new
+end
+
+-- TODO: handle operator mode
+
+local sch = readchar()
+
+-- TODO: simply exit when user enter a special key
+-- like ESCAPE
 
 local positions = {}
 -- NOTE:
 -- W: don't wrap at the end of file
 local sflag = "W"
+local startline = fn.line("w0")
 local stopline = fn.line("w$")
 
 -- TODO: save current position
-local cpos = {}
+-- let save_cursor = getcurpos()
+-- MoveTheCursorAround
+-- call setpos('.', save_cursor)
+local cpos = fn.getcursorcharpos(0)
 
 while true do
-	local pos = fn.searchpos(ch, sflag, stopline)
+	-- TODO: it may not work with wide charaters
+	local pos = fn.searchpos(sch, sflag, stopline)
 	if pos[1] == 0 and pos[2] == 0 then
 		break
 	end
 	table.insert(positions, pos)
 end
 
-print(vim.inspect(positions))
+-- NOTE: if no match, simply stop
+if #positions == 0 then
+	return
+end
 
+log.debug(vim.inspect(positions))
 
--- TODO: if no match, simply stop
+-- NOTE: move cursor to first match
+local fm = positions[1]
+setpos(fm)
 
+-- NOTE: if there is only one match, move the cursor and exit
+if #positions == 1 then
+	return
+end
 
--- TODO: move cursor to first match
-local cpos = {}
+-- TODO: is it a good way to label things?
+-- Why not just highlight that position
+-- TODO: better safe labels which are easy to type
+-- currently copy from leap.nvim
+-- local safe_labels = { "s", "f", "n", "u", "t", "/", "S", "F", "N", "L", "H", "M", "U", "G", "T", "Z", "?" }
+local safe_labels = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "+" }
 
+local jlist = {}
+local buf = api.nvim_buf_get_lines(0, startline - 1, stopline, false)
+log.debug(buf)
+local newbuf = copybuf(buf)
+-- NOTE: label non-first matches
+for i = 2, #positions do
+	local lb = safe_labels[i - 1]
+	-- TODO: handle situation where
+	-- number of labels is less than number of matches
+	if lb == nil then
+		break
+	end
+	local pos = positions[i]
+	jlist[lb] = pos
 
--- TODO: label non-first matches
+	-- TODO: draw labels near positions, 2 char after
+	local lnum = pos[1]
+	local col = pos[2] -- NOTE: one-based
+	local cline = newbuf[lnum]
+	cline = vim.split(cline, "")
+	log.debug(vim.inspect(cline))
+	if cline[col + 2] then
+		cline[col + 2] = lb
+	else
+		table.insert(cline, lb)
+	end
+	cline = fn.join(cline, "")
+	newbuf[lnum] = cline
+end
 
--- TODO: optional: highlight non-first matches
+-- NOTE: set lines
+api.nvim_buf_set_lines(0, startline - 1, stopline, false, newbuf)
 
--- TODO: read user input, move cursor to matching label
+-- TODO: optional: highlight and label non-first matches
+
+-- NOTE: read user input, move cursor to matching label
+local lch = readchar()
+if jlist[lch] then
+	local um = jlist[lch]
+	setpos(um)
+end
+
+-- NOTE: restore line
+-- api.nvim_buf_set_lines(0, startline - 1, stopline, false, buf)
