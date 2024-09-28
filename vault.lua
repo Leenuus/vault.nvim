@@ -1,6 +1,10 @@
 local fn = vim.fn
 local api = vim.api
-local log = require("plenary").log
+
+local log
+local ok, _ = pcall(function()
+	log = require("plenary").log
+end)
 
 local function restore_opts(opts)
 	opts = opts
@@ -47,7 +51,6 @@ local function copybuf(buf)
 end
 
 local function vault()
-	-- TODO: handle visual mode
 	-- TODO: handle operator mode
 
 	local sch = readchar()
@@ -84,7 +87,9 @@ local function vault()
 
 	local old_opts = restore_opts()
 
-	log.debug(vim.inspect(positions))
+	if log then
+		log.debug(vim.inspect(positions))
+	end
 
 	-- NOTE: move cursor to first match
 	local fm = positions[1]
@@ -98,13 +103,17 @@ local function vault()
 	-- TODO: is it a good way to label things?
 	-- Why not just highlight that position
 	-- TODO: better safe labels which are easy to type
-	-- currently copy from leap.nvim
+	-- TODO: more labels is needed when more texts in the screen
+
 	-- local safe_labels = { "s", "f", "n", "u", "t", "/", "S", "F", "N", "L", "H", "M", "U", "G", "T", "Z", "?" }
-	local safe_labels = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "+" }
+	local safe_labels = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=" }
 
 	local jlist = {}
 	local buf = api.nvim_buf_get_lines(0, startline - 1, stopline, false)
-	log.debug(buf)
+
+	if log then
+		log.debug(buf)
+	end
 	local newbuf = copybuf(buf)
 	local hpositions = {}
 	-- NOTE: label non-first matches
@@ -125,7 +134,10 @@ local function vault()
 		local col = pos[2] -- NOTE: one-based
 		local cline = newbuf[lnum]
 		cline = vim.split(cline, "")
-		log.debug(vim.inspect(cline))
+
+		if log then
+			log.debug(vim.inspect(cline))
+		end
 		if cline[col + 2] then
 			cline[col + 2] = lb
 			table.insert(hpos, col + 2)
@@ -142,19 +154,18 @@ local function vault()
 	api.nvim_buf_set_lines(0, startline - 1, stopline, false, newbuf)
 
 	-- NOTE: highlight and label non-first matches
-	log.debug(hpositions)
+
+	if log then
+		log.debug(hpositions)
+	end
 	local hid = fn.matchaddpos("VaultNvim", hpositions)
 
 	vim.cmd("redraw")
 
 	-- TODO: optional: shade other contents
 
-	-- NOTE: read user input, move cursor to matching label
+	-- NOTE: read user input
 	local lch = readchar()
-	if jlist[lch] then
-		local um = jlist[lch]
-		setpos(um)
-	end
 
 	-- NOTE: restore line
 	api.nvim_buf_set_lines(0, startline - 1, stopline, false, buf)
@@ -164,9 +175,22 @@ local function vault()
 
 	-- NOTE: restore opts
 	restore_opts(old_opts)
+
+	-- NOTE: move cursor to matching label
+	if jlist[lch] then
+		local um = jlist[lch]
+		setpos(um)
+	end
 end
 
 -- NOTE: setup highlight group
 vim.cmd("highlight VaultNvim ctermbg=red guibg=red")
 
-vault()
+-- vault()
+
+vim.keymap.set("n", "s", vault)
+vim.keymap.set("x", "s", vault)
+-- vim.keymap.set("o", "s", vault)
+-- vim.keymap.set("v", "<Plug>Vault", vault)
+
+-- vim.keymap.set("x", "id", ":<C-U>normal! ggVG<CR>", { desc = "in document" })
