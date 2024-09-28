@@ -1,11 +1,6 @@
 local fn = vim.fn
 local api = vim.api
 
-local log
-local ok, _ = pcall(function()
-	log = require("plenary").log
-end)
-
 local function restore_opts(opts)
 	opts = opts
 		or {
@@ -50,13 +45,54 @@ local function copybuf(buf)
 	return new
 end
 
+-- TODO: is it a good way to label things?
+-- Why not just highlight that position
+-- TODO: better safe labels which are easy to type
+-- TODO: more labels is needed when more texts in the screen
+local safe_labels = {
+	"s",
+	"f",
+	"n",
+	"u",
+	"t",
+	"/",
+	"S",
+	"F",
+	"N",
+	"L",
+	"H",
+	"M",
+	"U",
+	"G",
+	"T",
+	"Z",
+	"?",
+	"1",
+	"2",
+	"3",
+	"4",
+	"5",
+	"6",
+	"7",
+	"8",
+	"9",
+	"0",
+	"-",
+	"=",
+}
+
+-- TODO: jump to special characters like `()[]{},`
+-- TODO: jump back instead only jump forward
 local function vault()
-	-- TODO: handle operator mode
+	local mode = fn.mode(1)
 
 	local sch = readchar()
 
-	-- TODO: simply exit when user enter a special key
+	-- NOTE: simply exit when user enter a special key
 	-- like ESCAPE
+	if sch == "^[" then
+		return
+	end
 
 	local positions = {}
 	-- NOTE:
@@ -87,33 +123,20 @@ local function vault()
 
 	local old_opts = restore_opts()
 
-	if log then
-		log.debug(vim.inspect(positions))
-	end
-
 	-- NOTE: move cursor to first match
 	local fm = positions[1]
-	setpos(fm)
+	if not mode ~= "no" then
+		setpos(fm)
+	end
 
 	-- NOTE: if there is only one match, move the cursor and exit
 	if #positions == 1 then
 		return
 	end
 
-	-- TODO: is it a good way to label things?
-	-- Why not just highlight that position
-	-- TODO: better safe labels which are easy to type
-	-- TODO: more labels is needed when more texts in the screen
-
-	-- local safe_labels = { "s", "f", "n", "u", "t", "/", "S", "F", "N", "L", "H", "M", "U", "G", "T", "Z", "?" }
-	local safe_labels = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=" }
-
 	local jlist = {}
 	local buf = api.nvim_buf_get_lines(0, startline - 1, stopline, false)
 
-	if log then
-		log.debug(buf)
-	end
 	local newbuf = copybuf(buf)
 	local hpositions = {}
 	-- NOTE: label non-first matches
@@ -135,9 +158,6 @@ local function vault()
 		local cline = newbuf[lnum]
 		cline = vim.split(cline, "")
 
-		if log then
-			log.debug(vim.inspect(cline))
-		end
 		if cline[col + 2] then
 			cline[col + 2] = lb
 			table.insert(hpos, col + 2)
@@ -150,14 +170,12 @@ local function vault()
 		table.insert(hpositions, hpos) -- NOTE: build highlight pos
 	end
 
+	-- TODO: use extmarks instead of set buffer content
 	-- NOTE: set lines and force redraw
 	api.nvim_buf_set_lines(0, startline - 1, stopline, false, newbuf)
 
 	-- NOTE: highlight and label non-first matches
 
-	if log then
-		log.debug(hpositions)
-	end
 	local hid = fn.matchaddpos("VaultNvim", hpositions)
 
 	vim.cmd("redraw")
@@ -183,14 +201,13 @@ local function vault()
 	end
 end
 
--- NOTE: setup highlight group
-vim.cmd("highlight VaultNvim ctermbg=red guibg=red")
+local function setup()
+	-- NOTE: setup highlight group
+	vim.cmd("highlight VaultNvim ctermbg=red guibg=red gui=italic,bold")
 
--- vault()
+	vim.keymap.set("n", "s", vault)
+	vim.keymap.set("x", "s", vault)
+	vim.keymap.set("o", "s", vault)
+end
 
-vim.keymap.set("n", "s", vault)
-vim.keymap.set("x", "s", vault)
--- vim.keymap.set("o", "s", vault)
--- vim.keymap.set("v", "<Plug>Vault", vault)
-
--- vim.keymap.set("x", "id", ":<C-U>normal! ggVG<CR>", { desc = "in document" })
+setup()
