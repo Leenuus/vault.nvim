@@ -1,30 +1,6 @@
 local fn = vim.fn
 local api = vim.api
 
-local function restore_opts(opts)
-	opts = opts
-		or {
-			scrolloff = 0,
-			modified = false,
-			modifiable = true,
-			readonly = false,
-			spell = false,
-			virtualedit = "",
-		}
-	local o_opts = {
-		scrolloff = vim.o["scrolloff"],
-		modified = vim.o["modified"],
-		modifiable = vim.o["modifiable"],
-		readonly = vim.o["readonly"],
-		spell = vim.o["spell"],
-		virtualedit = vim.o["virtualedit"],
-	}
-	for k, v in pairs(opts) do
-		vim.opt_local[k] = v
-	end
-	return o_opts
-end
-
 local function readchar()
 	local ch = fn.getchar()
 	ch = fn.nr2char(ch)
@@ -121,8 +97,6 @@ local function vault()
 		return
 	end
 
-	local old_opts = restore_opts()
-
 	-- NOTE: move cursor to first match
 	local fm = positions[1]
 	if not mode ~= "no" then
@@ -135,10 +109,9 @@ local function vault()
 	end
 
 	local jlist = {}
-	local buf = api.nvim_buf_get_lines(0, startline - 1, stopline, false)
 
-	local newbuf = copybuf(buf)
-	local hpositions = {}
+	local ns_id = api.nvim_create_namespace("vault.nvim")
+
 	-- NOTE: label non-first matches
 	for i = 2, #positions do
 		local lb = safe_labels[i - 1]
@@ -152,47 +125,32 @@ local function vault()
 		jlist[lb] = pos
 
 		-- NOTE: draw labels near positions, 2 char after
-		local lnum = pos[1]
+		local lnum = pos[1] -- NOTE: one-based
 		table.insert(hpos, lnum)
-		local col = pos[2] -- NOTE: one-based
-		local cline = newbuf[lnum]
-		cline = vim.split(cline, "")
+		local line = lnum - 1
+		local col = pos[2] - 1 -- NOTE: one-based
 
-		if cline[col + 2] then
-			cline[col + 2] = lb
-			table.insert(hpos, col + 2)
-		else
-			table.insert(cline, lb)
-			table.insert(hpos, #cline)
-		end
-		cline = fn.join(cline, "")
-		newbuf[lnum] = cline -- NOTE: build marked buf
-		table.insert(hpositions, hpos) -- NOTE: build highlight pos
+		-- NOTE: use extmarks instead of set buffer content
+		-- note: highlight and label non-first matches
+		api.nvim_buf_set_extmark(
+			0,
+			ns_id,
+			line,
+			col,
+			{ virt_text = { { lb, "VaultNvim" } }, virt_text_pos = "overlay" }
+		)
 	end
 
-	-- TODO: use extmarks instead of set buffer content
-	-- NOTE: set lines and force redraw
-	api.nvim_buf_set_lines(0, startline - 1, stopline, false, newbuf)
-
-	-- NOTE: highlight and label non-first matches
-
-	local hid = fn.matchaddpos("VaultNvim", hpositions)
-
-	vim.cmd("redraw")
-
 	-- TODO: optional: shade other contents
+
+	-- NOTE: redraw
+	vim.cmd("redraw")
 
 	-- NOTE: read user input
 	local lch = readchar()
 
-	-- NOTE: restore line
-	api.nvim_buf_set_lines(0, startline - 1, stopline, false, buf)
-
-	-- NOTE: remove highlight
-	fn.matchdelete(hid)
-
-	-- NOTE: restore opts
-	restore_opts(old_opts)
+	-- NOTE: remove highlight and marks
+	api.nvim_buf_clear_namespace(0, ns_id, 0, -1)
 
 	-- NOTE: move cursor to matching label
 	if jlist[lch] then
@@ -202,12 +160,12 @@ local function vault()
 end
 
 local function setup()
-	-- NOTE: setup highlight group
+	-- TODO: setup highlight group
+	api.nvim_create_namespace("vault.nvim")
+
 	vim.cmd("highlight VaultNvim ctermbg=red guibg=red gui=italic,bold")
 
-	vim.keymap.set("n", "s", vault)
-	vim.keymap.set("x", "s", vault)
-	vim.keymap.set("o", "s", vault)
+	vim.keymap.set({ "n", "o", "x" }, "s", vault)
 end
 
 setup()
